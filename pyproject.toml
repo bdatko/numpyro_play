@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "numpyro_play"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+numpyro = "^0.6.0"
+jupyter = "^1.0.0"
+ipykernel = "^5.5.5"
+ipython = "^7.25.0"
+matplotlib = "^3.4.2"
+seaborn = "^0.11.1"
+jupytext = "^1.11.3"
+statsmodels = "^0.12.2"
+tabulate = "^0.8.9"
+nbconvert = "^6.1.0"
+fire = "^0.4.0"
+arviz = "^0.11.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+poetry2conda = "^0.3.0"
+black = "^21.6b0"
+mypy = "^0.910"
+commitizen = "^2.17.11"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
