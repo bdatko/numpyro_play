@@ -23,6 +23,8 @@ environment.yaml: pyproject.toml
 ## Create the conda environment from the `environment.yaml` you have to activate afterwards
 .cenv: environment.yaml
 	$(conda) env create --quiet --force --file environment.yaml; \
+	$(activate_env) && pip install -q numpyro@git+https://github.com/pyro-ppl/numpyro; \
+	$(activate_env) && pip install graphviz; \
 	touch .cenv
 	@echo to activate: conda activate $(env_name)
 
