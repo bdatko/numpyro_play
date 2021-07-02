@@ -38,6 +38,7 @@ poetry2conda = "^0.3.0"
 black = "^21.6b0"
 mypy = "^0.910"
 commitizen = "^2.17.11"
+pylint = "^2.9.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
