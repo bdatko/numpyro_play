@@ -161,3 +161,4 @@ cython_debug/
 
 # Added by me
 scripts/*.ipynb
+.vscode/
