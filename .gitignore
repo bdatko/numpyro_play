@@ -160,5 +160,5 @@ cython_debug/
 # End of https://www.toptal.com/developers/gitignore/api/python,linux
 
 # Added by me
-scripts/*.ipynb
+scripts/
 .vscode/
