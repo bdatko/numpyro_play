@@ -30,6 +30,11 @@ environment.yaml: pyproject.toml
 	touch .cenv
 	@echo to activate: conda activate $(env_name)
 
+.PHONY: notebooks/*.ipynb
+## Sync Notebooks
+notebooks/*.ipynb:
+	$(activate_env) && jupytext --sync $@
+
 .PHONY: test
 ## Test for source and activate
 test:
