@@ -1,8 +1,16 @@
 [tool.poetry]
 name = "numpyro_play"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["Benjamin Datko"]
+
+[tool.commitizen]
+version = "0.2.0"
+tag_format = "v$version"
+version_files = [
+    "numpyro_play/__init__.py",
+    "pyproject.toml:version"
+]
 
 [tool.poetry2conda]
 name = "numpyro_play"
