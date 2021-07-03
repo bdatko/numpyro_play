@@ -23,13 +23,14 @@
 # +
 import numpy as np
 import jax
+from jax import jit, lax
 import jax.numpy as jnp
 import pandas as pd
 import matplotlib.pyplot as plt
 import arviz as az
 
 import numpyro
-from numpyro.distributions import Normal, Uniform, LogNormal
+from numpyro.distributions import Normal, Uniform, LogNormal, Gamma
 from numpyro.infer import MCMC, NUTS
 # -
 
@@ -73,10 +74,12 @@ def _conf(info):
 
 def slide(displacement, length, velocity, dt, acceleration, T):
     info = (displacement, length, velocity, dt, acceleration, T)
-    res = jax.lax.while_loop(_conf, _body, info)
+    res = lax.while_loop(_conf, _body, info)
     return res[-1]
 
-def jax_simulate(mu, key, noise_sigma, length=2.0, phi=jnp.pi / 6.0, dt=0.005):
+# length=2.0, phi=jnp.pi / 6.0, dt=0.005
+@jit
+def jax_simulate(mu, key, noise_sigma, length, phi, dt):
     T = jnp.zeros(())
     velocity = jnp.zeros(())
     displacement = jnp.zeros(())
@@ -86,12 +89,13 @@ def jax_simulate(mu, key, noise_sigma, length=2.0, phi=jnp.pi / 6.0, dt=0.005):
 
     return T + noise_sigma * jax.random.normal(key, ())
 
-print("First call: ", jax.jit(jax_simulate)(mu0, key, time_measurement_sigma))
-print ("Second call: ", jax.jit(jax_simulate)(0.14, key, time_measurement_sigma))
-print ("Third call, different type: ", jax.jit(jax_simulate)(0, key, time_measurement_sigma))
-
 
 # -
+
+print("First call: ", jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
+print ("Second call: ", jax_simulate(0.14, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
+print ("Third call, different type: ", jax_simulate(0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
+
 
 # analytic formula that the simulator above is computing via
 # numerical integration (no measurement noise)
@@ -99,7 +103,7 @@ print ("Third call, different type: ", jax.jit(jax_simulate)(0, key, time_measur
 def analytic_T(mu, length=2.0, phi=jnp.pi / 6.0):
     numerator = 2.0 * length
     denominator = little_g * (jnp.sin(phi) - mu * jnp.cos(phi))
-    return np.sqrt(numerator / denominator)
+    return jnp.sqrt(numerator / denominator)
 
 
 # generate N_obs observations using simulator and the true coefficient of friction mu0
@@ -108,33 +112,27 @@ N_obs = 20
 
 keys = jax.random.split(key, N_obs)
 
-observed_data = jnp.array([jax.jit(jax_simulate)(mu0, key, time_measurement_sigma) for key in keys])
+observed_data = jnp.array([jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005) for key in keys])
 observed_mean = jnp.mean(observed_data)
 observed_mean
 
-# **Prior**
-#
-# From [Wikipedia on PTFE](https://en.wikipedia.org/wiki/Polytetrafluoroethylene):
-# *The coefficient of friction of plastics is usually measured against polished steel.[24] PTFE's coefficient of friction is 0.05 to 0.10,[15] which is the third-lowest of any known solid material (aluminium magnesium boride (BAM) being the first, with a coefficient of friction of 0.02; diamond-like carbon being second-lowest at 0.05)*
-#
-# Also largets value from the table, regardless of static or sliding, seems to be ~3.0 for Pt [Wikipedia on Friction](https://en.wikipedia.org/wiki/Friction)
-#
-# I guess the school's physics lab could be doing the experiment with tracks made of Pt.... but I highly doubt
-
-b = LogNormal(0, 0.5).sample(jax.random.PRNGKey(12), (int(1e4),))
-az.plot_kde(b)
-plt.show()
+w = lambda info: jax.lax.while_loop(_conf, _body, info)
 
 
-def numpyro_model(observed_data, measurment_sigma, length=2.0, phi=jnp.pi / 6.0, dt=0.005):
-    mu = numpyro.sample("mu", LogNormal(0, 0.5))
+def numpyro_model(observed_data, measurment_sigma):
+    length = 2.0
+    phi = jnp.pi / 6.0
+    dt = 0.005
+    mu = numpyro.sample("mu", Uniform(0.0, 1.0))
     
     with numpyro.plate("data_loop", len(observed_data)):
         T = jnp.zeros(())
         velocity = jnp.zeros(())
         displacement = jnp.zeros(())
         acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
-        T_simulated = slide(displacement, length, velocity, dt, acceleration, T)
+        info = (displacement, length, velocity, dt, acceleration, T)
+        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        T_simulated = res[-1]
         numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
         
     return mu
@@ -142,10 +140,88 @@ def numpyro_model(observed_data, measurment_sigma, length=2.0, phi=jnp.pi / 6.0,
 
 numpyro.render_model(numpyro_model, model_args=(observed_data,time_measurement_sigma), render_distributions=True)
 
-nuts_kernel = NUTS(numpyro_model)
+nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True)
 
-mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=10, num_chains=1, chain_method='parallel', progress_bar=True)
+mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=1, chain_method='parallel', progress_bar=True)
 
 mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+
+mcmc.print_summary()
+
+ds = az.from_numpyro(mcmc)
+
+inferred_mu = ds.posterior["mu"].mean().item()
+inferred_mu_uncertainty = ds.posterior["mu"].std().item()
+print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
+          (inferred_mu, inferred_mu_uncertainty))
+
+print("the mean observed descent time in the dataset is: %.4f seconds" % observed_mean)
+print("the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds" %
+          jax.jit(jax_simulate)(inferred_mu, key, 0., 2.0, jnp.pi / 6.0, 0.005))
+print(("disregarding measurement noise, elementary calculus gives the descent time\n" +
+           "for the inferred (mean) mu as: %.4f seconds") % analytic_T(inferred_mu))
+
+az.plot_density(ds.posterior, var_names=["mu"])
+
+az.plot_trace(ds)
+plt.show()
+
+az.plot_rank(ds)
+plt.show()
+
+# **Prior**
+#
+# From [Wikipedia on PTFE](https://en.wikipedia.org/wiki/Polytetrafluoroethylene):
+# *The coefficient of friction of plastics is usually measured against polished steel.[24] PTFE's coefficient of friction is **0.05 to 0.10**,[15] which is the **third-lowest of any known solid material** (aluminium magnesium boride (BAM) being the first, with a coefficient of friction of 0.02; diamond-like carbon being second-lowest at 0.05)*
+#
+# Also largets value from the table for both static and sliding is **1.4 for Ag** and **3.0 for Pt**, respectfully [Wikipedia on Friction](https://en.wikipedia.org/wiki/Friction)
+#
+# I guess the school's physics lab could be doing the experiment with tracks made of Pt or Ag.... but I highly doubt
+
+b = Gamma(2, 2).sample(jax.random.PRNGKey(12), (int(1e4),))
+az.plot_kde(b)
+plt.show()
+
+
+# +
+def numpyro_model(observed_data, measurment_sigma):
+    length = 2.0
+    phi = jnp.pi / 6.0
+    dt = 0.005
+    mu = numpyro.sample("mu", Gamma(2, 2))
+    
+    with numpyro.plate("data_loop", len(observed_data)):
+        T = jnp.zeros(())
+        velocity = jnp.zeros(())
+        displacement = jnp.zeros(())
+        acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
+        info = (displacement, length, velocity, dt, acceleration, T)
+        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        T_simulated = res[-1]
+        numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
+        
+    return mu
+
+nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True)
+mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=1, chain_method='parallel', progress_bar=True)
+mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+ds = az.from_numpyro(mcmc)
+inferred_mu = ds.posterior["mu"].mean().item()
+inferred_mu_uncertainty = ds.posterior["mu"].std().item()
+print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
+          (inferred_mu, inferred_mu_uncertainty))
+print("the mean observed descent time in the dataset is: %.4f seconds" % observed_mean)
+print("the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds" %
+          jax.jit(jax_simulate)(inferred_mu, key, 0., 2.0, jnp.pi / 6.0, 0.005))
+print(("disregarding measurement noise, elementary calculus gives the descent time\n" +
+           "for the inferred (mean) mu as: %.4f seconds") % analytic_T(inferred_mu))
+mcmc.print_summary()
+# -
+
+az.plot_trace(ds)
+plt.show()
+
+az.plot_rank(ds)
+plt.show()
 
 
