@@ -31,7 +31,7 @@ import arviz as az
 
 import numpyro
 from numpyro.distributions import Normal, Uniform, LogNormal, Gamma
-from numpyro.infer import MCMC, NUTS
+from numpyro.infer import MCMC, NUTS, SA
 # -
 
 key = jax.random.PRNGKey(2)
@@ -140,13 +140,12 @@ def numpyro_model(observed_data, measurment_sigma):
 
 numpyro.render_model(numpyro_model, model_args=(observed_data,time_measurement_sigma), render_distributions=True)
 
-nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True)
-
-mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=1, chain_method='parallel', progress_bar=True)
-
-mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
-
-mcmc.print_summary()
+for depth in (10, 13, 15):
+    nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True, max_tree_depth=depth)
+    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=4, chain_method='parallel', progress_bar=True)
+    mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+    print(f"--" * 25 + f"max_tree_depth={depth}" + f"--" * 25)
+    mcmc.print_summary()
 
 ds = az.from_numpyro(mcmc)
 
@@ -168,6 +167,49 @@ plt.show()
 
 az.plot_rank(ds)
 plt.show()
+
+
+# +
+def numpyro_model(observed_data, measurment_sigma):
+    length = 2.0
+    phi = jnp.pi / 6.0
+    dt = 0.005
+    mu = numpyro.sample("mu", Uniform(0.0, 1.0))
+    
+    with numpyro.plate("data_loop", len(observed_data)):
+        T = jnp.zeros(())
+        velocity = jnp.zeros(())
+        displacement = jnp.zeros(())
+        acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
+        info = (displacement, length, velocity, dt, acceleration, T)
+        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        T_simulated = res[-1]
+        numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
+        
+    return mu
+
+sa_kernel = SA(numpyro_model)
+num_samples, num_chains = 4000, 10
+mcmc = MCMC(sa_kernel, num_warmup=2000, num_samples=num_samples, num_chains=num_chains, chain_method='parallel', progress_bar=False)
+mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+
+for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+    inferred_mu = row.mean().item()
+    inferred_mu_uncertainty = row.std().item()
+    print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
+              (inferred_mu, inferred_mu_uncertainty))
+
+
+mcmc.print_summary()
+
+# +
+for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+    plt.plot(row)
+
+plt.show()
+# -
+
+plt.plot(mcmc.get_samples()["mu"])
 
 # **Prior**
 #
@@ -202,9 +244,13 @@ def numpyro_model(observed_data, measurment_sigma):
         
     return mu
 
-nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True)
-mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=1, chain_method='parallel', progress_bar=True)
-mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+for depth in (10, 13, 15):
+    nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True, max_tree_depth=depth)
+    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=4, chain_method='parallel', progress_bar=True)
+    mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+    print(f"--" * 25 + f"max_tree_depth={depth}" + f"--" * 25)
+    mcmc.print_summary()
+    
 ds = az.from_numpyro(mcmc)
 inferred_mu = ds.posterior["mu"].mean().item()
 inferred_mu_uncertainty = ds.posterior["mu"].std().item()
@@ -215,7 +261,6 @@ print("the (forward) simulated descent time for the inferred (mean) mu is: %.4f 
           jax.jit(jax_simulate)(inferred_mu, key, 0., 2.0, jnp.pi / 6.0, 0.005))
 print(("disregarding measurement noise, elementary calculus gives the descent time\n" +
            "for the inferred (mean) mu as: %.4f seconds") % analytic_T(inferred_mu))
-mcmc.print_summary()
 # -
 
 az.plot_trace(ds)
@@ -223,5 +268,48 @@ plt.show()
 
 az.plot_rank(ds)
 plt.show()
+
+
+# +
+def numpyro_model(observed_data, measurment_sigma):
+    length = 2.0
+    phi = jnp.pi / 6.0
+    dt = 0.005
+    mu = numpyro.sample("mu", Gamma(2, 2))
+    
+    with numpyro.plate("data_loop", len(observed_data)):
+        T = jnp.zeros(())
+        velocity = jnp.zeros(())
+        displacement = jnp.zeros(())
+        acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
+        info = (displacement, length, velocity, dt, acceleration, T)
+        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        T_simulated = res[-1]
+        numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
+        
+    return mu
+
+sa_kernel = SA(numpyro_model)
+num_samples, num_chains = 4000, 10
+mcmc = MCMC(sa_kernel, num_warmup=2000, num_samples=num_samples, num_chains=num_chains, chain_method='parallel', progress_bar=False)
+mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+
+for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+    inferred_mu = row.mean().item()
+    inferred_mu_uncertainty = row.std().item()
+    print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
+              (inferred_mu, inferred_mu_uncertainty))
+
+
+mcmc.print_summary()
+
+# +
+for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+    plt.plot(row)
+
+plt.show()
+# -
+
+plt.plot(mcmc.get_samples()["mu"])
 
 
