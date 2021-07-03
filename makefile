@@ -25,6 +25,8 @@ environment.yaml: pyproject.toml
 	$(conda) env create --quiet --force --file environment.yaml; \
 	$(activate_env) && pip install -q numpyro@git+https://github.com/pyro-ppl/numpyro; \
 	$(activate_env) && pip install graphviz; \
+	$(activate_env) && $(conda) install pytorch=1.8.1 cpuonly -c pytorch -y; \
+	$(activate_env) && pip3 install pyro-ppl; \
 	touch .cenv
 	@echo to activate: conda activate $(env_name)
 
