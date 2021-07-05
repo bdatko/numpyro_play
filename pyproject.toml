@@ -25,6 +25,7 @@ matplotlib = { channel = "conda-forge" }
 jupytext = { channel = "conda-forge" }
 fire = { channel = "conda-forge" }
 numpyro = { channel = "conda-forge" }
+funsor = { channel = "pip" }
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -39,6 +40,7 @@ tabulate = "^0.8.9"
 nbconvert = "^6.1.0"
 fire = "^0.4.0"
 arviz = "^0.11.2"
+funsor = "^0.4.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

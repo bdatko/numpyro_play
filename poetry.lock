@@ -272,6 +272,27 @@ six = "*"
 termcolor = "*"
 
 [[package]]
+name = "funsor"
+version = "0.4.1"
+description = "A tensor-like library for functions and distributions"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+makefun = "*"
+multipledispatch = "*"
+numpy = ">=1.7"
+opt-einsum = ">=2.3.2"
+typing-extensions = "*"
+
+[package.extras]
+dev = ["black", "flake8", "isort (>=5.0)", "nbsphinx", "pandas", "pillow (==8.2.0)", "pytest (==4.3.1)", "pytest-xdist (==1.27.0)", "scipy", "sphinx (>=2.0)", "sphinx-gallery", "sphinx-rtd-theme", "torchvision (>=0.10.0)"]
+jax = ["numpyro (>=0.2.4)", "jax (>=0.1.57)", "jaxlib (>=0.1.37)"]
+test = ["black", "flake8", "isort (>=5.0)", "pandas", "pillow (==8.2.0)", "pyro-api (>=0.1.2)", "pytest (==4.3.1)", "pytest-xdist (==1.27.0)", "requests", "scipy", "torchvision (>=0.10.0)"]
+torch = ["pyro-ppl (>=1.6.0)", "torch (>=1.9.0)"]
+
+[[package]]
 name = "hypothesis"
 version = "6.14.1"
 description = "A library for property-based testing"
@@ -573,6 +594,14 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 
 [[package]]
+name = "makefun"
+version = "1.11.3"
+description = "Small library to dynamically create python functions."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "markdown-it-py"
 version = "1.1.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -667,6 +696,17 @@ description = "More routines for operating on iterables, beyond itertools"
 category = "dev"
 optional = false
 python-versions = ">=3.5"
+
+[[package]]
+name = "multipledispatch"
+version = "0.6.0"
+description = "Multiple dispatch"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+six = "*"
 
 [[package]]
 name = "mypy"
@@ -818,6 +858,21 @@ description = "NumPy is the fundamental package for array computing with Python.
 category = "main"
 optional = false
 python-versions = ">=3.7"
+
+[[package]]
+name = "opt-einsum"
+version = "3.3.0"
+description = "Optimizing numpys einsum function"
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[package.dependencies]
+numpy = ">=1.7"
+
+[package.extras]
+docs = ["sphinx (==1.2.3)", "sphinxcontrib-napoleon", "sphinx-rtd-theme", "numpydoc"]
+tests = ["pytest", "pytest-cov", "pytest-pep8"]
 
 [[package]]
 name = "packaging"
@@ -1403,7 +1458,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pyt
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "52a8fb73991be24babdeac15e6f2ade48dd4e29d8a33cccbdbe1738d451296c1"
+content-hash = "643a6a55e07078f61988d00e0a9d0af58ec2ff5167ae8b130b41f7d364725a92"
 
 [metadata.files]
 appdirs = [
@@ -1591,6 +1646,10 @@ entrypoints = [
 fire = [
     {file = "fire-0.4.0.tar.gz", hash = "sha256:c5e2b8763699d1142393a46d0e3e790c5eb2f0706082df8f647878842c216a62"},
 ]
+funsor = [
+    {file = "funsor-0.4.1-py3-none-any.whl", hash = "sha256:8b6293a029af5e3f7785ef08848ca33720921473e931dd686d599b9c0cef8c48"},
+    {file = "funsor-0.4.1.tar.gz", hash = "sha256:3f85c19156c03b47a32122c7099cd44eb1fa8a8ab6385f08f397414c2e30de34"},
+]
 hypothesis = [
     {file = "hypothesis-6.14.1-py3-none-any.whl", hash = "sha256:6dad44da8962cc7c13cdc28cf9b78c6779b5a0b0279a9baac427ae6d109f70e3"},
     {file = "hypothesis-6.14.1.tar.gz", hash = "sha256:88b0736a5691b68b8e16a4b7ee8e4c8596810c5a20989ea5b5f64870a7c25740"},
@@ -1718,6 +1777,10 @@ lazy-object-proxy = [
     {file = "lazy_object_proxy-1.6.0-cp39-cp39-win32.whl", hash = "sha256:1fee665d2638491f4d6e55bd483e15ef21f6c8c2095f235fef72601021e64f61"},
     {file = "lazy_object_proxy-1.6.0-cp39-cp39-win_amd64.whl", hash = "sha256:f5144c75445ae3ca2057faac03fda5a902eff196702b0a24daf1d6ce0650514b"},
 ]
+makefun = [
+    {file = "makefun-1.11.3-py2.py3-none-any.whl", hash = "sha256:a19bddf07efb6bf92e3ccde5d593e49bc59001fd6c17cf7301d7a73a2647ae83"},
+    {file = "makefun-1.11.3.tar.gz", hash = "sha256:033eed65e2c1804fca84161a38d1fc8bb8650d32a89ac1c5dc7e54b2b2c2e88c"},
+]
 markdown-it-py = [
     {file = "markdown-it-py-1.1.0.tar.gz", hash = "sha256:36be6bb3ad987bfdb839f5ba78ddf094552ca38ccbd784ae4f74a4e1419fc6e3"},
     {file = "markdown_it_py-1.1.0-py3-none-any.whl", hash = "sha256:98080fc0bc34c4f2bcf0846a096a9429acbd9d5d8e67ed34026c03c61c464389"},
@@ -1798,6 +1861,11 @@ mistune = [
 more-itertools = [
     {file = "more-itertools-8.8.0.tar.gz", hash = "sha256:83f0308e05477c68f56ea3a888172c78ed5d5b3c282addb67508e7ba6c8f813a"},
     {file = "more_itertools-8.8.0-py3-none-any.whl", hash = "sha256:2cf89ec599962f2ddc4d568a05defc40e0a587fbc10d5989713638864c36be4d"},
+]
+multipledispatch = [
+    {file = "multipledispatch-0.6.0-py2-none-any.whl", hash = "sha256:407e6d8c5fa27075968ba07c4db3ef5f02bea4e871e959570eeb69ee39a6565b"},
+    {file = "multipledispatch-0.6.0-py3-none-any.whl", hash = "sha256:a55c512128fb3f7c2efd2533f2550accb93c35f1045242ef74645fc92a2c3cba"},
+    {file = "multipledispatch-0.6.0.tar.gz", hash = "sha256:a7ab1451fd0bf9b92cab3edbd7b205622fb767aeefb4fb536c2e3de9e0a38bea"},
 ]
 mypy = [
     {file = "mypy-0.910-cp35-cp35m-macosx_10_9_x86_64.whl", hash = "sha256:a155d80ea6cee511a3694b108c4494a39f42de11ee4e61e72bc424c490e46457"},
@@ -1914,6 +1982,10 @@ numpy = [
     {file = "numpy-1.21.0-cp39-cp39-win_amd64.whl", hash = "sha256:2ba579dde0563f47021dcd652253103d6fd66165b18011dce1a0609215b2791e"},
     {file = "numpy-1.21.0-pp37-pypy37_pp73-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:3c40e6b860220ed862e8097b8f81c9af6d7405b723f4a7af24a267b46f90e461"},
     {file = "numpy-1.21.0.zip", hash = "sha256:e80fe25cba41c124d04c662f33f6364909b985f2eb5998aaa5ae4b9587242cce"},
+]
+opt-einsum = [
+    {file = "opt_einsum-3.3.0-py3-none-any.whl", hash = "sha256:2455e59e3947d3c275477df7f5205b30635e266fe6dc300e3d9f9646bfcea147"},
+    {file = "opt_einsum-3.3.0.tar.gz", hash = "sha256:59f6475f77bbc37dcf7cd748519c0ec60722e91e63ca114e68821c0c54a46549"},
 ]
 packaging = [
     {file = "packaging-20.9-py2.py3-none-any.whl", hash = "sha256:67714da7f7bc052e064859c05c595155bd1ee9f69f76557e21f051443c20947a"},
