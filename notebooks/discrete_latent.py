@@ -15,12 +15,15 @@
 
 # # Purpose
 # * playing around with `infer_discrete`
+# * The example below show itreations based on the discussion on the [Pyro forum](https://forum.pyro.ai/t/mcmc-get-samples-returns-empty-dict/3086)
+# * If you need sometihng similar look at [`Predictive`](http://num.pyro.ai/en/latest/utilities.html#predictive) and [Example: Bayesian Models of Annotation](http://num.pyro.ai/en/latest/examples/annotation.html) from [Support infer_discrete for Predictive (#1086) ](https://github.com/pyro-ppl/numpyro/commit/003424bb3c57e44b433991cc73ddbb557bf31f3c)
 
 import jax
 import jax.numpy as jnp
 import numpyro
 from numpyro.contrib.funsor import config_enumerate, infer_discrete
 import numpyro.distributions as dist
+from numpyro.infer.util import Predictive
 import pandas as pd
 from numpyro.infer import MCMC, NUTS, DiscreteHMCGibbs
 
@@ -109,15 +112,36 @@ mcmc = MCMC(nuts_kernel, num_warmup=num_warmup, num_samples=num_samples, num_cha
 mcmc.run(key, *data)
 # -
 
+posterior_samples = mcmc.get_samples()
+posterior_samples
+
 num_samples = 4000
 
-posterior_samples = mcmc.get_samples()
 discrete_samples = jax.vmap(infer_discrete_model)(
-    jax.random.split(jax.random.PRNGKey(1), num_samples), posterior_samples
+    jax.random.split(jax.random.PRNGKey(1), num_samples), {}
 )
-
-posterior_samples
 
 discrete_samples["murderer"].mean(), discrete_samples["murderer"].std()
 
+# ## Using Predictive
+
+# +
+key = jax.random.PRNGKey(3)
+
+guess = 0.7
+
+
+def mystery(guess):
+    weapon_cpt = jnp.array([[0.9, 0.1], [0.2, 0.8]])
+    murderer = numpyro.sample("murderer", dist.Bernoulli(guess))
+    weapon = numpyro.sample("weapon", dist.Categorical(weapon_cpt[murderer]))
+    return murderer, weapon
+
+
+conditioned_model = numpyro.handlers.condition(mystery, {"weapon": 0.0})
+
+predictive = Predictive(conditioned_model, num_samples=1000, infer_discrete=True)
+samples = predictive(key, guess)
+samples["murderer"].mean(), samples["murderer"].std()
+# -
 
