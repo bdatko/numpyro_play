@@ -228,6 +228,22 @@ python-versions = "*"
 six = "*"
 
 [[package]]
+name = "daft"
+version = "0.1.2"
+description = "PGM rendering at its finest"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+
+[package.extras]
+docs = ["myst-nb", "sphinx", "jupytext"]
+test = ["pytest"]
+
+[[package]]
 name = "decli"
 version = "0.5.2"
 description = "Minimal, easy-to-use, declarative cli tool"
@@ -1458,7 +1474,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pyt
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "643a6a55e07078f61988d00e0a9d0af58ec2ff5167ae8b130b41f7d364725a92"
+content-hash = "2a05bbea15cae340f6518b5f343323244142db1d52202fed0a12bf95350ecd2a"
 
 [metadata.files]
 appdirs = [
@@ -1626,6 +1642,10 @@ commitizen = [
 cycler = [
     {file = "cycler-0.10.0-py2.py3-none-any.whl", hash = "sha256:1d8a5ae1ff6c5cf9b93e8811e581232ad8920aeec647c37316ceac982b08cb2d"},
     {file = "cycler-0.10.0.tar.gz", hash = "sha256:cd7b2d1018258d7247a71425e9f26463dfb444d411c39569972f4ce586b0c9d8"},
+]
+daft = [
+    {file = "daft-0.1.2-py3-none-any.whl", hash = "sha256:8771c8f109e07d08f90eff11adcf722831cc7db0605cf6dd9dcde524082cf74f"},
+    {file = "daft-0.1.2.tar.gz", hash = "sha256:3e77e0389ca539a5741a906bcdcaae462b68261d06b960b0c04498b695d312e5"},
 ]
 decli = [
     {file = "decli-0.5.2-py3-none-any.whl", hash = "sha256:d3207bc02d0169bf6ed74ccca09ce62edca0eb25b0ebf8bf4ae3fb8333e15ca0"},

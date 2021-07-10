@@ -26,6 +26,7 @@ jupytext = { channel = "conda-forge" }
 fire = { channel = "conda-forge" }
 numpyro = { channel = "conda-forge" }
 funsor = { channel = "pip" }
+daft = { channel = "pip" }
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -41,6 +42,7 @@ nbconvert = "^6.1.0"
 fire = "^0.4.0"
 arviz = "^0.11.2"
 funsor = "^0.4.1"
+daft = "^0.1.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
