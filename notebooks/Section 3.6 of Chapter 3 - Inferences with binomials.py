@@ -28,11 +28,16 @@ from numpyro.infer.util import Predictive
 import pandas as pd
 from numpyro.infer import MCMC, NUTS, DiscreteHMCGibbs
 
+# +
 rng_key = jax.random.PRNGKey(2)
+keys = jax.random.split(rng_key, 4)
+
 num_warmup = 1000
 num_samples = 5000
 num_chains = 4
 
+
+# -
 
 # ### Discrete `n`
 
@@ -56,7 +61,7 @@ numpyro.render_model(model36, (a,b,probs,k), render_distributions=True)
 
 kernel = numpyro.infer.DiscreteHMCGibbs(NUTS(model36), modified=True)
 mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, num_chains=num_chains)
-mcmc.run(rng_key, a=b, b=b, probs=probs, k=k)
+mcmc.run(keys[0], a=b, b=b, probs=probs, k=k)
 mcmc.print_summary()
 
 ds= az.from_numpyro(mcmc)
@@ -69,14 +74,14 @@ from numpyro.infer.util import Predictive
 
 kernel = NUTS(model36)
 mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, num_chains=num_chains)
-mcmc.run(rng_key, a=b, b=b, probs=probs, k=k)
+mcmc.run(keys[1], a=b, b=b, probs=probs, k=k)
 mcmc.print_summary()
 
 az.plot_trace(mcmc.get_samples());
 
 posterior_samples = mcmc.get_samples()
 predictive = Predictive(model36, posterior_samples, infer_discrete=True, batch_ndims=num_chains)
-discrete_samples = predictive(jax.random.PRNGKey(1), *(a, b, probs, k))
+discrete_samples = predictive(keys[2], *(a, b, probs, k))
 
 az.stats.summary(np.array(discrete_samples["n"].reshape(num_chains,num_samples)), hdi_prob=0.9)
 
@@ -103,10 +108,13 @@ numpyro.render_model(modelu, (a,b,nmax,k), render_distributions=True)
 # + tags=[]
 kernel = NUTS(modelu)
 mcmc = MCMC(kernel, num_warmup=num_warmup, num_samples=num_samples, num_chains=num_chains)
-mcmc.run(rng_key, a=b, b=b, nmax=nmax, k=k)
+mcmc.run(keys[3], a=b, b=b, nmax=nmax, k=k)
 mcmc.print_summary()
 # -
 
 jnp.array([0.22, 0.26, 0.13, 0.0, 0.66]) * nmax
+
+ds= az.from_numpyro(mcmc)
+az.plot_trace(ds);
 
 
