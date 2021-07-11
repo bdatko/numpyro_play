@@ -112,9 +112,10 @@ mcmc.run(keys[3], a=b, b=b, nmax=nmax, k=k)
 mcmc.print_summary()
 # -
 
-jnp.array([0.22, 0.26, 0.13, 0.0, 0.66]) * nmax
-
 ds= az.from_numpyro(mcmc)
+
+az.stats.summary(ds["posterior"]["n"], hdi_prob=0.9)
+
 az.plot_trace(ds);
 
 
