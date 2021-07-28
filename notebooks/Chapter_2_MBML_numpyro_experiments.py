@@ -680,6 +680,8 @@ plt.semilogy(np.array(svi_result.losses))
 expected["model_04 skill_01 P(csharp)"] = np.array(svi_result.params["skill_p"][0])
 expected["model_04 skill_02 P(sql)"] = np.array(svi_result.params["skill_p"][1])
 
+# #### Final Result
+
 expected
 
 # #### model_05
@@ -701,7 +703,7 @@ def model_05(
     with participants_plate:
         skills = []
         for s in range(n_skills):
-            skills.append(numpyro.sample("skill_{}".format(s), dist.Bernoulli(0.5)), infer={"enumerate": "parallel"})
+            skills.append(numpyro.sample("skill_{}".format(s), dist.Bernoulli(0.5), infer={"enumerate": "parallel"}))
 
     for q in range(n_questions):
         has_skills = reduce(operator.mul, [skills[i] for i in skills_needed[q]])
@@ -712,15 +714,114 @@ def model_05(
             obs=graded_responses[q],
         )
 
+# * trying out `@config_enumeration`, shouldn't work
+#
+# ```python
+# nuts_kernel = NUTS(model_05)
+#
+# kernel = DiscreteHMCGibbs(nuts_kernel, modified=True)
+#
+# mcmc = MCMC(kernel, num_warmup=200, num_samples=1000, num_chains=1)
+# mcmc.run(rng_key, responses_check, skills_needed_check)
+# mcmc.print_summary()
+#
+# ```
+#
+# ```python
+# AssertionError                            Traceback (most recent call last)
+# <ipython-input-29-df2927072321> in <module>
+#       4 
+#       5 mcmc = MCMC(kernel, num_warmup=200, num_samples=1000, num_chains=1)
+# ----> 6 mcmc.run(rng_key, responses_check, skills_needed_check)
+#       7 mcmc.print_summary()
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/mcmc.py in run(self, rng_key, extra_fields, init_params, *args, **kwargs)
+#     564         map_args = (rng_key, init_state, init_params)
+#     565         if self.num_chains == 1:
+# --> 566             states_flat, last_state = partial_map_fn(map_args)
+#     567             states = tree_map(lambda x: x[jnp.newaxis, ...], states_flat)
+#     568         else:
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/mcmc.py in _single_chain_mcmc(self, init, args, kwargs, collect_fields)
+#     353         rng_key, init_state, init_params = init
+#     354         if init_state is None:
+# --> 355             init_state = self.sampler.init(
+#     356                 rng_key,
+#     357                 self.num_warmup,
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/hmc_gibbs.py in init(self, rng_key, num_warmup, init_params, model_args, model_kwargs)
+#     439             and site["infer"].get("enumerate", "") != "parallel"
+#     440         ]
+# --> 441         assert (
+#     442             self._gibbs_sites
+#     443         ), "Cannot detect any discrete latent variables in the model."
+#
+# AssertionError: Cannot detect any discrete latent variables in the model.
+# ```
 
-# +
-nuts_kernel = NUTS(model_03)
-
-kernel = DiscreteHMCGibbs(nuts_kernel, modified=True)
-
-mcmc = MCMC(kernel, num_warmup=200, num_samples=1000, num_chains=1)
-mcmc.run(rng_key, responses_check, skills_needed_check)
-mcmc.print_summary()
-# -
+# * trying again with Predictive
+#
+# ```python
+# predictive = Predictive(
+#     model_05,
+#     num_samples=3000,
+#     infer_discrete=True,
+# )
+# discrete_samples = predictive(rng_key, responses_check, skills_needed_check)
+# ```
+#
+# ```python
+# ValueError                                Traceback (most recent call last)
+# <ipython-input-30-96739de38523> in <module>
+#       4     infer_discrete=True,
+#       5 )
+# ----> 6 discrete_samples = predictive(rng_key, responses_check, skills_needed_check)
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/util.py in __call__(self, rng_key, *args, **kwargs)
+#     892             )
+#     893         model = substitute(self.model, self.params)
+# --> 894         return _predictive(
+#     895             rng_key,
+#     896             model,
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/util.py in _predictive(rng_key, model, posterior_samples, batch_shape, return_sites, infer_discrete, parallel, model_args, model_kwargs)
+#     737     rng_key = rng_key.reshape(batch_shape + (2,))
+#     738     chunk_size = num_samples if parallel else 1
+# --> 739     return soft_vmap(
+#     740         single_prediction, (rng_key, posterior_samples), len(batch_shape), chunk_size
+#     741     )
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/util.py in soft_vmap(fn, xs, batch_ndims, chunk_size)
+#     403         fn = vmap(fn)
+#     404 
+# --> 405     ys = lax.map(fn, xs) if num_chunks > 1 else fn(xs)
+#     406     map_ndims = int(num_chunks > 1) + int(chunk_size > 1)
+#     407     ys = tree_map(
+#
+#     [... skipping hidden 15 frame]
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/infer/util.py in single_prediction(val)
+#     702             model_trace = prototype_trace
+#     703             temperature = 1
+# --> 704             pred_samples = _sample_posterior(
+#     705                 config_enumerate(condition(model, samples)),
+#     706                 first_available_dim,
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/contrib/funsor/discrete.py in _sample_posterior(model, first_available_dim, temperature, rng_key, *args, **kwargs)
+#      60     with funsor.adjoint.AdjointTape() as tape:
+#      61         with block(), enum(first_available_dim=first_available_dim):
+# ---> 62             log_prob, model_tr, log_measures = _enum_log_density(
+#      63                 model, args, kwargs, {}, sum_op, prod_op
+#      64             )
+#
+# ~/anaconda3/envs/numpyro_play/lib/python3.8/site-packages/numpyro/contrib/funsor/infer_util.py in _enum_log_density(model, model_args, model_kwargs, params, sum_op, prod_op)
+#     238     result = funsor.optimizer.apply_optimizer(lazy_result)
+#     239     if len(result.inputs) > 0:
+# --> 240         raise ValueError(
+#     241             "Expected the joint log density is a scalar, but got {}. "
+#     242             "There seems to be something wrong at the following sites: {}.".format(
+#
+# ValueError: Expected the joint log density is a scalar, but got (2,). There seems to be something wrong at the following sites: {'_pyro_dim_1'}.
+# ```
 
 
