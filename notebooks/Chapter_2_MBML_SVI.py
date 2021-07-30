@@ -42,6 +42,7 @@ pyro.set_rng_seed(0)
 
 # # Purpose
 # - Reproducing [`fritzo`'s answer](https://forum.pyro.ai/t/model-based-machine-learning-book-chapter-2-skills-example-in-pyro-tensor-dimension-issue/464/12?u=bdatko) to [Chapter 2 MBML Learning skills](https://mbmlbook.com/LearningSkills.html)
+# - Some of the trials and experiments were motivated by discusion on the [Pyro forum](https://forum.pyro.ai/t/numpyro-chapter-2-mbml/3184).
 #
 # The twist:
 # 1. we are using `pyro.__version__ == 1.7.0` instead of `0.3`
