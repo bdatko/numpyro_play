@@ -24,6 +24,16 @@ import numpyro.distributions as dist
 
 from jax import random
 from numpyro.infer import MCMC, NUTS
+# -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p numpy,numpyro,jax
+
+# %watermark -gb
 
 # +
 J = 8
