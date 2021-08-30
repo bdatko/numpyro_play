@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.11.3
 #   kernelspec:
 #     display_name: Python [conda env:numpyro_play]
 #     language: python
@@ -53,6 +53,15 @@ from numpyro.infer.util import log_density, potential_energy
 
 
 # -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p arviz,jax,matplotlib,numpy,pandas,scipy,numpyro
+
+# %watermark -gb
 
 def neg_log_proba_score(posterior_samples: Dict, params_sites: List[str], y_true):
     """
