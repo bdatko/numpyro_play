@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.11.3
 #   kernelspec:
 #     display_name: Python [conda env:numpyro_play]
 #     language: python
@@ -39,6 +39,15 @@ from tqdm import tqdm
 
 pyro.set_rng_seed(0)
 # -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p arviz,matplotlib,numpy,pandas,pyro,torch,tqdm
+
+# %watermark -gb
 
 # # Purpose
 # - Reproducing [`fritzo`'s answer](https://forum.pyro.ai/t/model-based-machine-learning-book-chapter-2-skills-example-in-pyro-tensor-dimension-issue/464/12?u=bdatko) to [Chapter 2 MBML Learning skills](https://mbmlbook.com/LearningSkills.html)
@@ -507,5 +516,3 @@ expected["best decay TraceGraph_ELBO P(sql)"] = res_skill_1[-1, :]
 # -
 
 expected
-
-
