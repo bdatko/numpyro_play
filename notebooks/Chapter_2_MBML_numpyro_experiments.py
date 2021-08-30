@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.11.3
 #   kernelspec:
 #     display_name: Python [conda env:numpyro_play]
 #     language: python
@@ -32,6 +32,15 @@ from numpyro.infer.util import Predictive
 
 rng_key = jax.random.PRNGKey(2)
 # -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p arviz,jax,matplotlib,numpy,pandas,numpyro
+
+# %watermark -gb
 
 expected = pd.DataFrame(
     [
@@ -823,5 +832,3 @@ def model_05(
 #
 # ValueError: Expected the joint log density is a scalar, but got (2,). There seems to be something wrong at the following sites: {'_pyro_dim_1'}.
 # ```
-
-
