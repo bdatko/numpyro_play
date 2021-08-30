@@ -44,6 +44,15 @@ import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS, Predictive
 # -
 
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p numpy,jax,pandas,matplotlib,arviz,numpyro
+
+# %watermark -gb
+
 key = jax.random.PRNGKey(0)
 key
 
@@ -66,20 +75,19 @@ X_train.shape, y_train.shape
 def model(X, num_classes, y=None,):
     num_items, num_features = X.shape
     pi = numpyro.sample("pi", dist.Dirichlet(jnp.ones(num_classes)))
+    plate_D = numpyro.plate("D", num_features, dim=None)
     
-    with numpyro.plate("D", num_features, dim=None):
+    with plate_D:
         with numpyro.plate("C", num_classes):
-            theta = numpyro.sample("theta", dist.Beta(1,1))
+            theta = numpyro.sample("theta_jc", dist.Beta(1,1))
             
     with numpyro.plate("N", num_items, dim=-2):
-        y = numpyro.sample("y", dist.Categorical(pi), obs=y)
-        with numpyro.plate("D", num_features, dim=None):
-            x = numpyro.sample("x", dist.Bernoulli(theta[y]), obs=X)
+        y = numpyro.sample("Y_i", dist.Categorical(pi), obs=y)
+        with plate_D:
+            x = numpyro.sample("X_ij", dist.Bernoulli(theta[y]), obs=X)
 
 
 numpyro.render_model(model, (X_train[:10,:], 2, y_train[:10]), render_distributions=True)
-
-jnp.array((0.91, 0.02, 0.90, 0.32, 0.66, 0.71, 0.32, 0.70, 0.94, 0.49))
 
 nuts_kernel = NUTS(model)
 mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=4)
@@ -94,7 +102,7 @@ from numpyro.infer import Predictive
 
 predictive = Predictive(model, mcmc.get_samples())
 
-predictions = predictive(jax.random.PRNGKey(3), X_test, 2)['y']
+predictions = predictive(jax.random.PRNGKey(3), X_test, 2)['Y_i']
 
 X_test.shape
 
@@ -108,8 +116,44 @@ clf.fit(X_train, y_train)
 
 clf.class_count_ / clf.class_count_.sum()
 
-(clf.feature_count_ / clf.feature_count_.sum()).T
+clf.feature_count_.T
+
+np.exp(clf.feature_log_prob_).T
 
 clf.score(X_test, y_test)
+
+# ## MLE
+
+from numpyro.infer import SVI, Trace_ELBO, autoguide
+
+
+def model(X, num_classes, y=None,):
+    num_items, num_features = X.shape
+    pi = numpyro.sample("pi", dist.Dirichlet(jnp.ones(num_classes)))
+    plate_D = numpyro.plate("D", num_features, dim=None)
+    
+    with plate_D:
+        with numpyro.plate("C", num_classes):
+            theta = numpyro.param("theta_jc", jnp.ones((num_classes,num_features)) * 0.5, constraint=dist.constraints.unit_interval)
+            
+    with numpyro.plate("N", num_items, dim=-2):
+        y = numpyro.sample("Y_i", dist.Categorical(pi), obs=y)
+        with plate_D:
+            x = numpyro.sample("X_ij", dist.Bernoulli(theta[y]), obs=X)
+
+
+def guide(X, num_classes, y=None,):
+    class_prior = numpyro.param("class_prior", jnp.ones(num_classes), constraint=dist.constraints.positive)
+    numpyro.sample("pi", dist.Dirichlet(class_prior))
+
+
+guide = autoguide.AutoDiagonalNormal(model)   
+
+optimizer = numpyro.optim.Adam(0.0005)
+svi = SVI(model, guide, optimizer, loss=Trace_ELBO())
+svi_result = svi.run(jax.random.PRNGKey(15), 2000, X_train, 2, y_train)
+params = svi_result.params
+
+params
 
 
