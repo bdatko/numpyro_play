@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "numpyro_play"
-version = "0.2.0"
+version = "0.3.0"
 description = ""
 authors = ["Benjamin Datko"]
 
 [tool.commitizen]
-version = "0.2.0"
+version = "0.3.0"
 tag_format = "v$version"
 version_files = [
     "numpyro_play/__init__.py",
