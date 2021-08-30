@@ -16,23 +16,33 @@
 # # Purpose
 # * porting the [importance sampling from pyro](https://pyro.ai/examples/inclined_plane.html) to numpyro
 # * pyro importance sampling with a cpuonly PyTorch took forever
+# * iterations motivated by the discussion on the [NumPyro forum](https://forum.pyro.ai/t/pyro-example-importance-sampling-port-to-numpyro/3052?u=bdatko)
 #
 # *Copyright (c) 2017-2019 Uber Technologies, Inc.*
 # *SPDX-License-Identifier: Apache-2.0*
 
 # +
-import numpy as np
-import jax
-from jax import jit, lax
-import jax.numpy as jnp
-import pandas as pd
-import matplotlib.pyplot as plt
 import arviz as az
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from jax import jit, lax
 
 import numpyro
-from numpyro.distributions import Normal, Uniform, LogNormal, Gamma
+from numpyro.distributions import Gamma, LogNormal, Normal, Uniform
 from numpyro.infer import MCMC, NUTS, SA
 # -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p arviz,jax,matplotlib,numpy,pandas,scipy,numpyro
+
+# %watermark -gb
 
 key = jax.random.PRNGKey(2)
 key
@@ -65,17 +75,20 @@ def _body(info):
     displacement += velocity * dt
     velocity += acceleration * dt
     T += dt
-    
+
     return displacement, length, velocity, dt, acceleration, T
+
 
 def _conf(info):
     displacement, length, _, _, _, _ = info
     return displacement < length
 
+
 def slide(displacement, length, velocity, dt, acceleration, T):
     info = (displacement, length, velocity, dt, acceleration, T)
     res = lax.while_loop(_conf, _body, info)
     return res[-1]
+
 
 # length=2.0, phi=jnp.pi / 6.0, dt=0.005
 @jit
@@ -84,7 +97,7 @@ def jax_simulate(mu, key, noise_sigma, length, phi, dt):
     velocity = jnp.zeros(())
     displacement = jnp.zeros(())
     acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
-    
+
     T = slide(displacement, length, velocity, dt, acceleration, T)
 
     return T + noise_sigma * jax.random.normal(key, ())
@@ -92,9 +105,18 @@ def jax_simulate(mu, key, noise_sigma, length, phi, dt):
 
 # -
 
-print("First call: ", jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
-print ("Second call: ", jax_simulate(0.14, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
-print ("Third call, different type: ", jax_simulate(0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005))
+print(
+    "First call: ",
+    jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005),
+)
+print(
+    "Second call: ",
+    jax_simulate(0.14, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005),
+)
+print(
+    "Third call, different type: ",
+    jax_simulate(0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005),
+)
 
 
 # analytic formula that the simulator above is computing via
@@ -112,7 +134,12 @@ N_obs = 20
 
 keys = jax.random.split(key, N_obs)
 
-observed_data = jnp.array([jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005) for key in keys])
+observed_data = jnp.array(
+    [
+        jax_simulate(mu0, key, time_measurement_sigma, 2.0, jnp.pi / 6.0, 0.005)
+        for key in keys
+    ]
+)
 observed_mean = jnp.mean(observed_data)
 observed_mean
 
@@ -124,26 +151,43 @@ def numpyro_model(observed_data, measurment_sigma):
     phi = jnp.pi / 6.0
     dt = 0.005
     mu = numpyro.sample("mu", Uniform(0.0, 1.0))
-    
+
     with numpyro.plate("data_loop", len(observed_data)):
         T = jnp.zeros(())
         velocity = jnp.zeros(())
         displacement = jnp.zeros(())
         acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
         info = (displacement, length, velocity, dt, acceleration, T)
-        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        res = jax.lax.cond(
+            acceleration <= 0, info, lambda _: (0.0, 0.0, 0.0, 0.0, 0.0, 1.0e5), info, w
+        )
         T_simulated = res[-1]
         numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
-        
+
     return mu
 
 
-numpyro.render_model(numpyro_model, model_args=(observed_data,time_measurement_sigma), render_distributions=True)
+numpyro.render_model(
+    numpyro_model,
+    model_args=(observed_data, time_measurement_sigma),
+    render_distributions=True,
+)
 
 for depth in (10, 13, 15):
-    nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True, max_tree_depth=depth)
-    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=4, chain_method='parallel', progress_bar=True)
-    mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+    nuts_kernel = NUTS(
+        numpyro_model, forward_mode_differentiation=True, max_tree_depth=depth
+    )
+    mcmc = MCMC(
+        nuts_kernel,
+        num_warmup=500,
+        num_samples=1000,
+        num_chains=4,
+        chain_method="parallel",
+        progress_bar=True,
+    )
+    mcmc.run(
+        key, observed_data, time_measurement_sigma, extra_fields=("potential_energy",)
+    )
     print(f"--" * 25 + f"max_tree_depth={depth}" + f"--" * 25)
     mcmc.print_summary()
 
@@ -151,14 +195,23 @@ ds = az.from_numpyro(mcmc)
 
 inferred_mu = ds.posterior["mu"].mean().item()
 inferred_mu_uncertainty = ds.posterior["mu"].std().item()
-print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
-          (inferred_mu, inferred_mu_uncertainty))
+print(
+    "the coefficient of friction inferred by pyro is %.3f +- %.3f"
+    % (inferred_mu, inferred_mu_uncertainty)
+)
 
 print("the mean observed descent time in the dataset is: %.4f seconds" % observed_mean)
-print("the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds" %
-          jax.jit(jax_simulate)(inferred_mu, key, 0., 2.0, jnp.pi / 6.0, 0.005))
-print(("disregarding measurement noise, elementary calculus gives the descent time\n" +
-           "for the inferred (mean) mu as: %.4f seconds") % analytic_T(inferred_mu))
+print(
+    "the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds"
+    % jax.jit(jax_simulate)(inferred_mu, key, 0.0, 2.0, jnp.pi / 6.0, 0.005)
+)
+print(
+    (
+        "disregarding measurement noise, elementary calculus gives the descent time\n"
+        + "for the inferred (mean) mu as: %.4f seconds"
+    )
+    % analytic_T(inferred_mu)
+)
 
 az.plot_density(ds.posterior, var_names=["mu"])
 
@@ -169,41 +222,56 @@ az.plot_rank(ds)
 plt.show()
 
 
+# * Trying Sample Adaptive (SA) kernel from the [docs](http://num.pyro.ai/en/stable/examples/baseball.html?highlight=SA#example-baseball-batting-average)
+#     > Note that the Sample Adaptive (SA) kernel, which is implemented based on [5], requires large num_warmup and num_samples (e.g. 15,000 and 300,000). So it is better to disable progress bar to avoid dispatching overhead.
+
 # +
 def numpyro_model(observed_data, measurment_sigma):
     length = 2.0
     phi = jnp.pi / 6.0
     dt = 0.005
     mu = numpyro.sample("mu", Uniform(0.0, 1.0))
-    
+
     with numpyro.plate("data_loop", len(observed_data)):
         T = jnp.zeros(())
         velocity = jnp.zeros(())
         displacement = jnp.zeros(())
         acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
         info = (displacement, length, velocity, dt, acceleration, T)
-        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        res = jax.lax.cond(
+            acceleration <= 0, info, lambda _: (0.0, 0.0, 0.0, 0.0, 0.0, 1.0e5), info, w
+        )
         T_simulated = res[-1]
         numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
-        
+
     return mu
 
-sa_kernel = SA(numpyro_model)
-num_samples, num_chains = 4000, 10
-mcmc = MCMC(sa_kernel, num_warmup=2000, num_samples=num_samples, num_chains=num_chains, chain_method='parallel', progress_bar=False)
-mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
 
-for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+sa_kernel = SA(numpyro_model)
+num_samples, num_chains = 500_000, 20
+mcmc = MCMC(
+    sa_kernel,
+    num_warmup=num_samples // 2,
+    num_samples=num_samples,
+    num_chains=num_chains,
+    chain_method="parallel",
+    progress_bar=False,
+)
+mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=("potential_energy",))
+
+for row in mcmc.get_samples()["mu"].reshape((num_chains, num_samples)):
     inferred_mu = row.mean().item()
     inferred_mu_uncertainty = row.std().item()
-    print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
-              (inferred_mu, inferred_mu_uncertainty))
+    print(
+        "the coefficient of friction inferred by pyro is %.3f +- %.3f"
+        % (inferred_mu, inferred_mu_uncertainty)
+    )
 
 
 mcmc.print_summary()
 
 # +
-for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+for row in mcmc.get_samples()["mu"].reshape((num_chains, num_samples)):
     plt.plot(row)
 
 plt.show()
@@ -231,36 +299,59 @@ def numpyro_model(observed_data, measurment_sigma):
     phi = jnp.pi / 6.0
     dt = 0.005
     mu = numpyro.sample("mu", Gamma(2, 2))
-    
+
     with numpyro.plate("data_loop", len(observed_data)):
         T = jnp.zeros(())
         velocity = jnp.zeros(())
         displacement = jnp.zeros(())
         acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
         info = (displacement, length, velocity, dt, acceleration, T)
-        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        res = jax.lax.cond(
+            acceleration <= 0, info, lambda _: (0.0, 0.0, 0.0, 0.0, 0.0, 1.0e5), info, w
+        )
         T_simulated = res[-1]
         numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
-        
+
     return mu
 
+
 for depth in (10, 13, 15):
-    nuts_kernel = NUTS(numpyro_model,forward_mode_differentiation=True, max_tree_depth=depth)
-    mcmc = MCMC(nuts_kernel, num_warmup=500, num_samples=1000, num_chains=4, chain_method='parallel', progress_bar=True)
-    mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
+    nuts_kernel = NUTS(
+        numpyro_model, forward_mode_differentiation=True, max_tree_depth=depth
+    )
+    mcmc = MCMC(
+        nuts_kernel,
+        num_warmup=500,
+        num_samples=1000,
+        num_chains=4,
+        chain_method="parallel",
+        progress_bar=True,
+    )
+    mcmc.run(
+        key, observed_data, time_measurement_sigma, extra_fields=("potential_energy",)
+    )
     print(f"--" * 25 + f"max_tree_depth={depth}" + f"--" * 25)
     mcmc.print_summary()
-    
+
 ds = az.from_numpyro(mcmc)
 inferred_mu = ds.posterior["mu"].mean().item()
 inferred_mu_uncertainty = ds.posterior["mu"].std().item()
-print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
-          (inferred_mu, inferred_mu_uncertainty))
+print(
+    "the coefficient of friction inferred by pyro is %.3f +- %.3f"
+    % (inferred_mu, inferred_mu_uncertainty)
+)
 print("the mean observed descent time in the dataset is: %.4f seconds" % observed_mean)
-print("the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds" %
-          jax.jit(jax_simulate)(inferred_mu, key, 0., 2.0, jnp.pi / 6.0, 0.005))
-print(("disregarding measurement noise, elementary calculus gives the descent time\n" +
-           "for the inferred (mean) mu as: %.4f seconds") % analytic_T(inferred_mu))
+print(
+    "the (forward) simulated descent time for the inferred (mean) mu is: %.4f seconds"
+    % jax.jit(jax_simulate)(inferred_mu, key, 0.0, 2.0, jnp.pi / 6.0, 0.005)
+)
+print(
+    (
+        "disregarding measurement noise, elementary calculus gives the descent time\n"
+        + "for the inferred (mean) mu as: %.4f seconds"
+    )
+    % analytic_T(inferred_mu)
+)
 # -
 
 az.plot_trace(ds)
@@ -276,40 +367,50 @@ def numpyro_model(observed_data, measurment_sigma):
     phi = jnp.pi / 6.0
     dt = 0.005
     mu = numpyro.sample("mu", Gamma(2, 2))
-    
+
     with numpyro.plate("data_loop", len(observed_data)):
         T = jnp.zeros(())
         velocity = jnp.zeros(())
         displacement = jnp.zeros(())
         acceleration = (little_g * jnp.sin(phi)) - (little_g * jnp.cos(phi)) * mu
         info = (displacement, length, velocity, dt, acceleration, T)
-        res = jax.lax.cond(acceleration <= 0, info, lambda _: (0.,0.,0.,0.,0.,1.0e5), info, w)
+        res = jax.lax.cond(
+            acceleration <= 0, info, lambda _: (0.0, 0.0, 0.0, 0.0, 0.0, 1.0e5), info, w
+        )
         T_simulated = res[-1]
         numpyro.sample("obs", Normal(T_simulated, measurment_sigma), obs=observed_data)
-        
+
     return mu
 
-sa_kernel = SA(numpyro_model)
-num_samples, num_chains = 4000, 10
-mcmc = MCMC(sa_kernel, num_warmup=2000, num_samples=num_samples, num_chains=num_chains, chain_method='parallel', progress_bar=False)
-mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=('potential_energy',))
 
-for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+sa_kernel = SA(numpyro_model)
+num_samples, num_chains = 500_000, 20
+mcmc = MCMC(
+    sa_kernel,
+    num_warmup=num_samples // 2,
+    num_samples=num_samples,
+    num_chains=num_chains,
+    chain_method="parallel",
+    progress_bar=False,
+)
+mcmc.run(key, observed_data, time_measurement_sigma, extra_fields=("potential_energy",))
+
+for row in mcmc.get_samples()["mu"].reshape((num_chains, num_samples)):
     inferred_mu = row.mean().item()
     inferred_mu_uncertainty = row.std().item()
-    print("the coefficient of friction inferred by pyro is %.3f +- %.3f" %
-              (inferred_mu, inferred_mu_uncertainty))
+    print(
+        "the coefficient of friction inferred by pyro is %.3f +- %.3f"
+        % (inferred_mu, inferred_mu_uncertainty)
+    )
 
 
 mcmc.print_summary()
 
 # +
-for row in mcmc.get_samples()["mu"].reshape((num_chains,num_samples)):
+for row in mcmc.get_samples()["mu"].reshape((num_chains, num_samples)):
     plt.plot(row)
 
 plt.show()
 # -
 
 plt.plot(mcmc.get_samples()["mu"])
-
-
