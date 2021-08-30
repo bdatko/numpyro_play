@@ -27,6 +27,15 @@ from numpyro.infer.util import Predictive
 import pandas as pd
 from numpyro.infer import MCMC, NUTS, DiscreteHMCGibbs
 
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p jax,numpy,pandas,numpyro
+
+# %watermark -gb
+
 num_samples = 1000
 num_warmup = 1000
 num_chains = 4
