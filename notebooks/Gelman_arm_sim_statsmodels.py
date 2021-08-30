@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.11.3
 #   kernelspec:
 #     display_name: Python [conda env:numpyro_play]
 #     language: python
@@ -21,7 +21,11 @@
 #     - [Accepted answer to the question Simulating draws/data from a fitted model with factor/character level inputs](https://stackoverflow.com/a/42151309/3587374)
 #     - [Why does the sim function in Gelman's arm package simulate sigma from inverse chi square?](https://stats.stackexchange.com/questions/192996/why-does-the-sim-function-in-gelmans-arm-package-simulate-sigma-from-inverse-ch)
 #     
-# 1. A. Gelman and J. Hill, Data Analysis Using Regression and Multilevel/Hierarchical Models, Cambridge University Press (2007). 
+# - From page 272 of Ref [1]: *Review of prediction for classical regression*
+# > In classical regression, prediction is simple: specify the predictor matrix $\tilde{X}$ for a set of new observations and then compute the linear predictor $\tilde{X}\beta$, then simulate the predictive data:
+# > * For linear regression, simulate independent normal errors $\tilde{\varepsilon}_i$ with mean 0 and standard deviation $\sigma$, and compute $y=\tilde{X}\beta+\tilde{\varepsilon}$; see Section 7.2.
+#
+# Ref [1]. A. Gelman and J. Hill, Data Analysis Using Regression and Multilevel/Hierarchical Models, Cambridge University Press (2007). 
 
 # +
 from typing import Optional, Tuple, Union
