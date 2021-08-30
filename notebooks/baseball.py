@@ -38,7 +38,6 @@
 # 5. Michael Zhu (2019), ["Sample Adaptive MCMC"](https://papers.nips.cc/paper/9107-sample-adaptive-mcmc)
 
 # +
-import argparse
 import os
 
 import jax.numpy as jnp
@@ -50,6 +49,15 @@ import numpyro.distributions as dist
 from numpyro.examples.datasets import BASEBALL, load_dataset
 from numpyro.infer import HMC, MCMC, NUTS, SA, Predictive, log_likelihood
 # -
+
+# %matplotlib inline
+# %reload_ext autoreload
+# %autoreload 2
+# %load_ext watermark
+
+# %watermark -v -m -p os,jax,numpyro
+
+# %watermark -gb
 
 _, fetch_train = load_dataset(BASEBALL, split="train", shuffle=False)
 train, player_names = fetch_train()
