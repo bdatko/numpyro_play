@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.3
+#       jupytext_version: 1.11.4
 #   kernelspec:
 #     display_name: Python [conda env:numpyro_play]
 #     language: python
@@ -35,7 +35,7 @@
 # +
 import operator
 from functools import reduce
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 import arviz as az
 import jax
@@ -63,23 +63,81 @@ from numpyro.infer.util import log_density, potential_energy
 
 # %watermark -gb
 
-def neg_log_proba_score(posterior_samples: Dict, params_sites: List[str], y_true):
+# +
+def neg_log_proba_score(theta: np.array, y_true: np.array):
     """
     Calculates the the negative log probability of the ground truth, the self assessed skills.
-    :param posterior_samples Dict: dictionary of samples from the posterior.
-    :param params_sites List[str]: a list of params to compute proba
-    :y_true array-like dtype == int: array of indicator variables for skill of participants
+    :param theta np.array: array of beta probabilities
+    :param y_true np.array, dtype == int: array of indicator variables for skill of participants
     """
+    assert theta.shape == y_true.shape
     assert np.issubdtype(y_true.dtype, np.integer)
-    proba = np.zeros((len(params_sites), posterior_samples[params_sites[0]].shape[-1]))
-    assert proba.shape == y_true.shape
-    for i, param in enumerate(params_sites):
-        proba[i, :] = np.mean(posterior_samples[param], axis=0)
-
-    score = scipy.stats.bernoulli(proba).pmf(y_true)
+    score = scipy.stats.bernoulli(theta).pmf(y_true)
     score[score == 0.0] = np.finfo(float).eps
-
     return -np.log(score)
+
+
+def plot_bars(
+    data: np.array,
+    columns: List[str],
+    index: List[str],
+    ax=None,
+    tick_step=0.5,
+    **kwargs,
+):
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = None
+
+    pd.DataFrame(data, columns=columns, index=index).plot(
+        kind="bar", color=["b", "r"], ax=ax, zorder=3, **kwargs
+    )
+    ax.grid(zorder=0, axis="y")
+    ax.yaxis.set_ticks(np.arange(0, data.max(), tick_step));
+
+
+# -
+
+# ### Log pointwise predictive density from **log_likelihood** 
+#
+# signature: `log_likelihood(model, posterior_samples, *args, parallel=False, batch_ndims=1, **kwargs)`
+#
+# * A good example of `log_likelihood` is from the [Example: Baseball Batting Average](http://num.pyro.ai/en/stable/examples/baseball.html#example-baseball-batting-average)
+# * The code below calculates the Log pointwise predictive density
+
+def log_ppd(
+    model: Callable,
+    posterior_samples: Dict,
+    *args,
+    parallel=False,
+    batch_ndims=1,
+    **kwargs
+):
+    """
+    Log pointwise predictive density
+    :param model Callable: Python callable containing Pyro primitives
+    :param posterior_samples Dict: dictionary of samples from the posterior.
+    :param args: model arguments
+    :param parallel bool: passed to `log_likelihood` from numpyro.infer
+    :param batch_ndims Union[0, 1, 2]: passed to `log_likelihood` from numpyro.infer, see `log_likelihood` for details
+    :param kwargs: model kwargs
+    """
+    post_loglik = log_likelihood(
+        model,
+        posterior_samples,
+        *args,
+        parallel=parallel,
+        batch_ndims=batch_ndims,
+        **kwargs
+    )
+    post_loglik_res = np.concatenate(
+        [obs[:, None] for obs in post_loglik.values()], axis=1
+    )
+    exp_log_density = logsumexp(post_loglik_res, axis=0) - jnp.log(
+        jnp.shape(post_loglik_res)[0]
+    )
+    return exp_log_density
 
 
 rng_key = jax.random.PRNGKey(2)
@@ -111,6 +169,7 @@ responses = responses.astype("int32")
 
 # -
 
+# ## Without `plate`s
 # ### Define models and run inference
 
 def model_00(
@@ -171,7 +230,31 @@ log_density_model_00, model_00_trace = log_density(
     dict(prob_mistake=0.1, prob_guess=0.2),
     {key: value.mean(0) for key, value in mcmc_00.get_samples().items()},
 )
-log_density_model_00
+# -
+
+pe_model_00 = mcmc_00.get_extra_fields()["hmc_state.potential_energy"]
+
+exp_log_density_00 = log_ppd(
+    model_00, mcmc_00.get_samples(), jnp.array(responses), skills_needed
+)
+
+# +
+# post_loglik_00 = log_likelihood(
+#     model_00, mcmc_00.get_samples(), jnp.array(responses), skills_needed,
+# )
+# post_loglik_00_res = np.concatenate(
+#     [obs[:, None] for obs in post_loglik_00.values()], axis=1
+# )
+# exp_log_density_00 = logsumexp(post_loglik_00_res, axis=0) - jnp.log(
+#     jnp.shape(post_loglik_00_res)[0]
+# )
+
+# +
+theta_model_00 = np.zeros((22, 7))
+for i, param in enumerate(["skill_" + str(i) for i in range(7)]):
+    theta_model_00[:, i] = np.mean(mcmc_00.get_samples()[param], axis=0)
+
+neg_log_proba_model_00 = neg_log_proba_score(theta_model_00, self_assessed.values)
 
 
 # -
@@ -229,8 +312,6 @@ ds = az.from_numpyro(mcmc_02)
 
 az.plot_trace(ds);
 
-# ### Model Comparison
-
 # + tags=[]
 log_density_model_02, model_02_trace = log_density(
     model_02,
@@ -238,11 +319,35 @@ log_density_model_02, model_02_trace = log_density(
     dict(prob_mistake=0.1),
     {key: value.mean(0) for key, value in mcmc_02.get_samples().items()},
 )
-log_density_model_02
+# -
+
+pe_model_02 = mcmc_02.get_extra_fields()["hmc_state.potential_energy"]
+
+exp_log_density_02 = log_ppd(
+    model_02, mcmc_02.get_samples(), jnp.array(responses), skills_needed
+)
 
 # +
-pe_model_00 = mcmc_00.get_extra_fields()["hmc_state.potential_energy"]
-pe_model_02 = mcmc_02.get_extra_fields()["hmc_state.potential_energy"]
+# post_loglik_02 = log_likelihood(
+#     model_02, mcmc_02.get_samples(), jnp.array(responses), skills_needed,
+# )
+# post_loglik_02_res = np.concatenate(
+#     [obs[:, None] for obs in post_loglik_02.values()], axis=1
+# )
+# exp_log_density_02 = logsumexp(post_loglik_02_res, axis=0) - jnp.log(
+#     jnp.shape(post_loglik_02_res)[0]
+# )
+
+# +
+theta_model_02 = np.zeros((22, 7))
+for i, param in enumerate(["skill_" + str(i) for i in range(7)]):
+    theta_model_02[:, i] = np.mean(mcmc_02.get_samples()[param], axis=0)
+
+neg_log_proba_model_02 = neg_log_proba_score(theta_model_02, self_assessed.values)
+# -
+
+# ### Model Comparison without plates
+# #### Expected log joint density
 
 print(
     "Expected log joint density of model_00: {:.2f} +/- {:.2f}".format(
@@ -254,18 +359,17 @@ print(
         np.mean(-pe_model_02), np.std(-pe_model_02)
     )
 )
-# -
 
-pd.DataFrame(
+plot_bars(
     np.array([np.mean(pe_model_00), np.mean(pe_model_02)])[None, :],
-    columns=["Original", "Learned"],
-    index=["Overall"],
-).plot(
-    kind="bar",
-    color=["b", "r"],
+    ["Original", "Learned"],
+    ["Overall"],
+    tick_step=50.0,
     ylabel="negative Expected log density",
     yerr=[[np.std(pe_model_00)], [np.std(pe_model_02)]],
 )
+
+# #### Log Joing Density
 
 print(
     "Expected log joint density of model_00 from `log_density`: {:.2f}".format(
@@ -278,74 +382,321 @@ print(
     )
 )
 
-pd.DataFrame(
+plot_bars(
     -np.array([log_density_model_00, log_density_model_02])[None, :],
-    columns=["Original", "Learned"],
-    index=["Overall"],
-).plot(kind="bar", color=["b", "r"], ylabel="negative log density")
+    ["Original", "Learned"],
+    ["Overall"],
+    tick_step=50.0,
+    ylabel="negative log density",
+    yerr=[[np.std(pe_model_00)], [np.std(pe_model_02)]],
+)
 
-# #### **log_likelihood** 
-#
-# signature: `log_likelihood(model, posterior_samples, *args, parallel=False, batch_ndims=1, **kwargs)`
-#
-# * A good example of `log_likelihood` is from the [Example: Baseball Batting Average](http://num.pyro.ai/en/stable/examples/baseball.html#example-baseball-batting-average)
-# * The code below calculates the Log pointwise predictive density
-
-post_loglik_00 = log_likelihood(model_00, mcmc_00.get_samples(), jnp.array(responses), skills_needed,)
-post_loglik_00_res = np.concatenate([obs[:,None] for obs in post_loglik_00.values()],axis=1)
-exp_log_density_00 = logsumexp(post_loglik_00_res, axis=0) - jnp.log(jnp.shape(post_loglik_00_res)[0])
-
-post_loglik_02 = log_likelihood(model_02, mcmc_02.get_samples(), jnp.array(responses), skills_needed,)
-post_loglik_02_res = np.concatenate([obs[:,None] for obs in post_loglik_02.values()],axis=1)
-exp_log_density_02 = logsumexp(post_loglik_02_res, axis=0) - jnp.log(jnp.shape(post_loglik_02_res)[0])
+# #### Log pointwise predictive density
 
 pd.DataFrame(
     np.array([np.sum(exp_log_density_00), np.sum(exp_log_density_02)])[None, :],
     columns=["Original", "Learned"],
     index=["Overall"],
 ).plot(
-    kind="bar",
-    color=["b", "r"],
-    ylabel="Log pointwise predictive density",
+    kind="bar", color=["b", "r"], ylabel="Log pointwise predictive density",
 )
 
-# #### Negative log probability of the ground truth
+# ### Negative log probability of the ground truth
+# #### Figure 2.29(a) without plates
 
-# +
-neg_log_proba_model_00 = neg_log_proba_score(
-    mcmc_00.get_samples(),
-    ["skill_" + str(i) for i in range(7)],
-    self_assessed.values.T,
-)
-
-neg_log_proba_model_02 = neg_log_proba_score(
-    mcmc_02.get_samples(),
-    ["skill_" + str(i) for i in range(7)],
-    self_assessed.values.T,
-)
-# -
-
-# #### Figure 2.29(a)
-
-pd.DataFrame(
+plot_bars(
     np.array([neg_log_proba_model_00.mean(), neg_log_proba_model_02.mean()])[None, :],
-    columns=["Original", "Learned"],
-    index=["Overall"],
-).plot(kind="bar", color=["b", "r"])
+    ["Original", "Learned"],
+    ["Overall"],
+)
 
-# #### Figure 2.29(b)
+# #### Figure 2.29(b) without plates
 
-pd.DataFrame(
+plot_bars(
     np.concatenate(
         [
-            neg_log_proba_model_00.mean(1)[:, None],
-            neg_log_proba_model_02.mean(1)[:, None],
+            neg_log_proba_model_00.mean(0)[:, None],
+            neg_log_proba_model_02.mean(0)[:, None],
         ],
         axis=1,
     ),
+    ["Original", "Learned"],
+    ["Core", "OOP", "Life Cycle", "Web Apps Skills", "Desktop apps", "SQL", "C#"],
+)
+
+
+# ## Using `plate`s
+# ### Define models and run inference
+
+def model_03(
+    graded_responses, skills_needed: np.array, prob_mistake=0.1, prob_guess=0.2
+):
+    assert graded_responses.shape[0] == skills_needed.shape[0]
+    n_questions, n_participants = graded_responses.shape
+    n_skills = skills_needed.shape[1]
+
+    questions_plate = numpyro.plate("questions_plate", n_questions)
+
+    # skills.shape == (n_participants, n_skills)
+    with numpyro.plate("participants_plate", n_participants, dim=-2):
+        with numpyro.plate("skills_plate", n_skills):
+            skills = numpyro.sample("skill", dist.Bernoulli(0.5))
+
+    with questions_plate:
+        # shape: people x questions x skills
+        # astype(bool) is needed for the log density
+        relevant_skills = skills[:, None, :].astype(bool) | (~skills_needed)
+        # shape: people x questions
+        has_skill = jnp.all(relevant_skills, -1)
+        prob_correct = has_skill * (1 - prob_mistake) + (1 - has_skill) * prob_guess
+        is_correct = numpyro.sample(
+            "isCorrect", dist.Bernoulli(prob_correct), obs=graded_responses.T
+        )
+
+
+numpyro.render_model(
+    model_03,
+    (jnp.array(responses), jnp.array(skills_key.astype(bool))),
+    dict(prob_mistake=0.1),
+    render_distributions=True,
+)
+
+# +
+nuts_kernel = NUTS(model_03)
+
+kernel = DiscreteHMCGibbs(nuts_kernel, modified=True)
+
+mcmc_03 = MCMC(kernel, num_warmup=200, num_samples=1000, num_chains=4)
+mcmc_03.run(
+    rng_key,
+    jnp.array(responses),
+    jnp.array(skills_key.astype(bool)),
+    extra_fields=(
+        "z",
+        "hmc_state.potential_energy",
+        "hmc_state.z",
+        "rng_key",
+        "hmc_state.rng_key",
+    ),
+)
+mcmc_03.print_summary()
+# -
+
+ds = az.from_numpyro(mcmc_03)
+
+az.plot_trace(ds);
+
+log_density_model_03, model_03_trace = log_density(
+    model_03,
+    (jnp.array(responses), jnp.array(skills_key.astype(bool))),
+    {"prob_mistake": 0.1, "prob_guess": 0.2},
+    {key: value.mean(0) for key, value in mcmc_03.get_samples().items()},
+)
+
+pe_model_03 = mcmc_03.get_extra_fields()["hmc_state.potential_energy"]
+
+exp_log_density_03 = log_ppd(
+    model_03,
+    mcmc_03.get_samples(),
+    jnp.array(responses),
+    jnp.array(skills_key.astype(bool)),
+)
+
+# +
+# post_loglik_03 = log_likelihood(
+#     model_03,
+#     mcmc_03.get_samples(),
+#     jnp.array(responses),
+#     jnp.array(skills_key.astype(bool)),
+# )
+# post_loglik_03_res = np.concatenate(
+#     [obs[:, None] for obs in post_loglik_03.values()], axis=1
+# )
+# exp_log_density_03 = logsumexp(post_loglik_03_res, axis=0) - jnp.log(
+#     jnp.shape(post_loglik_03_res)[0]
+# )
+# -
+
+neg_log_proba_model_03 = neg_log_proba_score(
+    mcmc_03.get_samples()["skill"].mean(0), self_assessed.values
+)
+
+
+def model_04(
+    graded_responses, skills_needed: np.array, prob_mistake=0.1,
+):
+    assert graded_responses.shape[0] == skills_needed.shape[0]
+    n_questions, n_participants = graded_responses.shape
+    n_skills = skills_needed.shape[1]
+
+    questions_plate = numpyro.plate("questions_plate", n_questions)
+
+    with questions_plate:
+        prob_guess = numpyro.sample("prob_guess", dist.Beta(2.5, 7.5))
+
+    # skills.shape == (n_participants, n_skills)
+    with numpyro.plate("participants_plate", n_participants, dim=-2):
+        with numpyro.plate("skills_plate", n_skills):
+            skills = numpyro.sample("skill", dist.Bernoulli(0.5))
+
+    with questions_plate:
+        # shape: people x questions x skills
+        # astype(bool) is needed for the log density
+        relevant_skills = skills[:, None, :].astype(bool) | (~skills_needed)
+        # shape: people x questions
+        has_skill = jnp.all(relevant_skills, -1)
+        prob_correct = has_skill * (1 - prob_mistake) + (1 - has_skill) * prob_guess
+        is_correct = numpyro.sample(
+            "isCorrect", dist.Bernoulli(prob_correct), obs=graded_responses.T
+        )
+
+
+numpyro.render_model(
+    model_04,
+    (jnp.array(responses), jnp.array(skills_key.astype(bool))),
+    dict(prob_mistake=0.1),
+    render_distributions=True,
+)
+
+# +
+nuts_kernel = NUTS(model_04)
+
+kernel = DiscreteHMCGibbs(nuts_kernel, modified=True)
+
+mcmc_04 = MCMC(kernel, num_warmup=200, num_samples=1000, num_chains=4)
+mcmc_04.run(
+    rng_key,
+    jnp.array(responses),
+    jnp.array(skills_key.astype(bool)),
+    extra_fields=(
+        "z",
+        "hmc_state.potential_energy",
+        "hmc_state.z",
+        "rng_key",
+        "hmc_state.rng_key",
+    ),
+)
+mcmc_04.print_summary()
+# -
+
+ds = az.from_numpyro(mcmc_04)
+
+az.plot_trace(ds);
+
+log_density_model_04, model_04_trace = log_density(
+    model_04,
+    (jnp.array(responses), jnp.array(skills_key.astype(bool))),
+    {"prob_mistake": 0.1},
+    {key: value.mean(0) for key, value in mcmc_04.get_samples().items()},
+)
+
+pe_model_04 = mcmc_04.get_extra_fields()["hmc_state.potential_energy"]
+
+exp_log_density_04 = log_ppd(
+    model_04,
+    mcmc_04.get_samples(),
+    jnp.array(responses),
+    jnp.array(skills_key.astype(bool)),
+)
+
+# +
+# post_loglik_04 = log_likelihood(
+#     model_04,
+#     mcmc_04.get_samples(),
+#     jnp.array(responses),
+#     jnp.array(skills_key.astype(bool)),
+# )
+# post_loglik_04_res = np.concatenate(
+#     [obs[:, None] for obs in post_loglik_04.values()], axis=1
+# )
+# exp_log_density_04 = logsumexp(post_loglik_04_res, axis=0) - jnp.log(
+#     jnp.shape(post_loglik_04_res)[0]
+# )
+# -
+
+neg_log_proba_model_04 = neg_log_proba_score(
+    mcmc_04.get_samples()["skill"].mean(0), self_assessed.values
+)
+
+# ### Model Comparison with plates
+# #### Expected log joint density
+
+print(
+    "Expected log joint density of model_00: {:.2f} +/- {:.2f}".format(
+        np.mean(-pe_model_03), np.std(-pe_model_03)
+    )
+)
+print(
+    "Expected log joint density of model_02: {:.2f} +/- {:.2f}".format(
+        np.mean(-pe_model_04), np.std(-pe_model_04)
+    )
+)
+
+plot_bars(
+    np.array([np.mean(pe_model_03), np.mean(pe_model_04)])[None, :],
+    ["Original", "Learned"],
+    ["Overall"],
+    tick_step=50.0,
+    ylabel="negative Expected log density",
+    yerr=[[np.std(pe_model_03)], [np.std(pe_model_04)]],
+)
+
+# #### Log Joing Density
+
+print(
+    "Expected log joint density of model_03 from `log_density`: {:.2f}".format(
+        log_density_model_03
+    )
+)
+print(
+    "Expected log joint density of model_04 from `log_density`: {:.2f}".format(
+        log_density_model_04
+    )
+)
+
+plot_bars(
+    -np.array([log_density_model_03, log_density_model_04])[None, :],
+    ["Original", "Learned"],
+    ["Overall"],
+    tick_step=50.0,
+    ylabel="negative log density",
+    yerr=[[np.std(pe_model_03)], [np.std(pe_model_04)]],
+)
+
+# #### Log pointwise predictive density
+
+pd.DataFrame(
+    np.array([np.sum(exp_log_density_03), np.sum(exp_log_density_04)])[None, :],
     columns=["Original", "Learned"],
-    index=["Core", "OOP", "Life Cycle", "Web Apps Skills", "Desktop apps", "SQL", "C#"],
-).plot(kind="bar", color=["b", "r"])
+    index=["Overall"],
+).plot(
+    kind="bar", color=["b", "r"], ylabel="Log pointwise predictive density",
+)
+
+# ### Negative log probability of the ground truth
+# #### Figure 2.29(a) with plates
+
+plot_bars(
+    np.array([neg_log_proba_model_03.mean(), neg_log_proba_model_04.mean()])[None, :],
+    ["Original", "Learned"],
+    ["Overall"],
+    ylabel="Negative Log Probability",
+)
+
+# #### Figure 2.29(b) with plates
+
+plot_bars(
+    np.concatenate(
+        [
+            neg_log_proba_model_03.mean(0)[:, None],
+            neg_log_proba_model_04.mean(0)[:, None],
+        ],
+        axis=1,
+    ),
+    ["Original", "Learned"],
+    ["Core", "OOP", "Life Cycle", "Web Apps Skills", "Desktop apps", "SQL", "C#"],
+    ylabel="Negative Log Probability",
+)
 
 
 # ### Odds and Ends
@@ -384,8 +735,6 @@ proba = get_proba(
 ).T
 
 proba.shape
-
-
 
 # +
 proba_00 = get_proba(
